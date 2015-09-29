@@ -8,7 +8,14 @@ and delete the original zip file.
 
 To run, type in the following command into the command line:
 
-python download_census_shapefiles.py [level]
+python download_census_shapefiles.py 
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -y, --year {2010,2011,2012,2013,2014,2015}
+                        Download year (Choose single year between 2010 and 2015)
+  -g, --geolevel {tract,bg,tabblock}
+                        Geographical level (Choose between tract, bg, tabblock)
 
 The level argument can take on one of the three values. Default to 'tract' if the arg is not specified.
     tract: census tract
@@ -21,8 +28,7 @@ import csv
 import sys
 import os
 import errno
-
-year = '2014'
+import argparse
 
 def require_dir(path):
     # This function make the directory if it doesn't exist already
@@ -31,44 +37,59 @@ def require_dir(path):
     except OSError, exc:
         if exc.errno != errno.EEXIST:
             raise
-
-if len(sys.argv) > 1:
-    if sys.argv[1].lower() in ['tract', 'bg', 'tabblock']:
-        level = sys.argv[1].lower()
-    else:
-        print 'Error: accepted levels are "tract", "bg", or "tabblock".'
-        exit(1)
-else:
-    level = 'tract' # default to download tract data if it is not specified in sys.argv
  
 # Get the list of state names and codes. The file should exist in the same directory as the python code.
-fips_csv = csv.DictReader(open('fips.csv', 'rU'), dialect='excel') 
+fips_csv = csv.DictReader(open('fips2.csv', 'rU'), dialect='excel') 
 rootdir = os.path.dirname(os.path.abspath(__file__))
- 
-for row in fips_csv:
-    statecode = row['code'].zfill(2)
-    if level == 'tabblock':
-        fileroot = 'tl_' + year + '_' + statecode + '_' + level + '10'
-    else:
-        fileroot = 'tl_' + year + '_' + statecode + '_' + level
 
-    filename = fileroot + '.zip'
-    filedir = os.path.join(rootdir, level, fileroot)
-    require_dir(filedir)
+#read in arguments from the command line
+parser = argparse.ArgumentParser(description='Download TIGER shape files from Census Bureau.')
 
-    url = 'http://www2.census.gov/geo/tiger/TIGER' + year + '/' + level.upper() + '/' + filename
-    print 'Getting ' + row['statename'] + ' ' + level + ' shape file: ' + filename
+#specify download year
+parser.add_argument("-y", "--year", help="Download year (Choose single year between 2010 and 2015)", type=int,
+                    # choices=['2010', '2011', '2012', '2013', '2014', '2015'], default='2014')
+                    choices=range(2010, 2016), default=2014)
 
-    try:
-        urllib.urlretrieve(url, os.path.join(filedir, filename))
+#specify whether to be strict about keys
+parser.add_argument("-g", "--geolevel", help="Geographical level (Choose between tract, bg, tabblock)",
+                    choices=['tract', 'bg', 'tabblock'], default='tract')
 
-        # Comment out the following code block if you do not wish to unzip the files
-        os.chdir(filedir)
-        os.system('unzip ' + os.path.join(filedir, filename))
-        os.system('rm ' + os.path.join(filedir, filename))
-        os.chdir(rootdir)
-        #
+args = parser.parse_args()
 
-    except:
-        print "Unexpected error:", sys.exc_info()[0]
-        sys.exc_clear()
+if __name__ == "__main__":
+        
+    #start a timer...
+    # t_start = datetime.datetime.now()
+
+    for row in fips_csv:
+        statecode = row['code'].zfill(2)
+        if args.geolevel == 'tabblock':
+            fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel + '10'
+        else:
+            fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel
+
+        filename = fileroot + '.zip'
+        filedir = os.path.join(rootdir, str(args.year), args.geolevel, fileroot)
+        require_dir(filedir)
+
+        url = 'http://www2.census.gov/geo/tiger/TIGER' + str(args.year)+ '/' + args.geolevel.upper() + '/' + filename
+        print 'Getting ' + row['statename'] + ' ' + args.geolevel + ' shape file: ' + filename
+
+        try:
+            urllib.urlretrieve(url, os.path.join(filedir, filename))
+
+            # Comment out the following code block if you do not wish to unzip the files
+            os.chdir(filedir)
+            os.system('unzip ' + os.path.join(filedir, filename))
+            os.system('rm ' + os.path.join(filedir, filename))
+            os.chdir(rootdir)
+            #
+
+        except:
+            print "Unexpected error:", sys.exc_info()[0]
+            sys.exc_clear()
+
+    #finish the timer and show to user
+    # t_end = datetime.datetime.now()
+
+    # print("elapsed time = {0}".format(t_end - t_start), file=sys.stderr)
