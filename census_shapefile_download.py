@@ -6,16 +6,17 @@ Running the script will download the zip files from the US census site,
 put it into subfolders in the folder of the python script,unzip the zip file, 
 and delete the original zip file.
 
-To run, type in the following command into the command line:
+To run, type in the following command into the command line as an example:
+python census_shapefile_download.py --year 2012 --geolevel bg --s DC MD VA
 
-python download_census_shapefiles.py 
+required arguments:
+  -s, --state: State(s) that you want to download the shape files for. Use two-character abbreviations, eg. --state DC MD VA
 
 optional arguments:
   -h, --help: Show this help message and exit
-  -y, --year: Download year (Choose single year between 2010 and 2015)
-  -g, --geolevel: Geographical level (Choose between tract, bg, tabblock)
-  -s, --state: State(s) that you want to download the shape files for. Use two-character abbreviations, eg. --state DC MD VA
-  -z, --zip: Keep files in zipped format. Default is to unzip.
+  -y, --year: Download year (Choose single year between 2010 and 2015). Default to 2014.
+  -g, --geolevel: Geographical level (Choose between tract, bg, tabblock). Default to tract.
+  -z, --zip: Keep files in zipped format. Default is false (ie. will unzip).
 
 The level argument can take on one of the three values. Default to 'tract' if the arg is not specified.
     tract: census tract
@@ -24,7 +25,6 @@ The level argument can take on one of the three values. Default to 'tract' if th
 '''
 
 import urllib
-import csv
 import sys
 import os
 import errno
@@ -51,26 +51,25 @@ states = {'AK': '02', 'AL': '01', 'AR': '05', 'AS': '60', 'AZ': '04', 'CA': '06'
           'WV': '54', 'WY': '56'
          }
 
-# Get the list of state names and codes. The file should exist in the same directory as the python code.
-fips_csv = csv.DictReader(open('fips2.csv', 'rU'), dialect='excel') 
 rootdir = os.path.dirname(os.path.abspath(__file__))
 
-#read in arguments from the command line
+# Read in arguments from the command line
 parser = argparse.ArgumentParser(description='Download TIGER shape files from Census Bureau.')
 
-#specify download year
+# Specify download year
 parser.add_argument("-y", "--year", help="Download year (Choose single year between 2010 and 2015)", type=int,
-                    # choices=['2010', '2011', '2012', '2013', '2014', '2015'], default='2014')
                     choices=range(2010, 2016), default=2014)
 
-#specify whether to be strict about keys
+# Specify geo-level
 parser.add_argument("-g", "--geolevel", help="Geographical level (Choose between tract, bg, tabblock)",
                     choices=['tract', 'bg', 'tabblock'], default='tract')
 
+# Specify state(s) by two-character abbreviations
 parser.add_argument("-s", "--state", help="State(s) that you want to download the shape files for. \
                     Use two-character abbreviations, eg. --state DC MD VA", 
                     nargs='*', choices=states.keys())
 
+#Specify whether to unzip (Unzip will occur by default)
 parser.add_argument("-z", "--zip", help="Keep files in zipped format. Default is to unzip.", action="store_true")
 
 args = parser.parse_args()
@@ -79,16 +78,31 @@ if __name__ == "__main__":
         
     for state in args.state:
         statecode = states[state]
-        if args.geolevel == 'tabblock':
-            fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel + '10'
-        else:
-            fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel
 
-        filename = fileroot + '.zip'
+        # The multiple if-else blocks is necessary to navigate the folder structure of census ftp site.
+        # Adding more supported year or geo-levels will require significant refactoring of this code.
+
+        if args.year >= 2014:
+            if args.geolevel == 'tabblock':
+                fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel + '10'
+            else:
+                fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel
+
+            filename = fileroot + '.zip'
+            url = 'http://www2.census.gov/geo/tiger/TIGER' + str(args.year)+ '/' + args.geolevel.upper() + '/' + filename
+
+        elif args.year >= 2011 and args.year < 2014:
+            fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel
+            filename = fileroot + '.zip'
+            url = 'http://www2.census.gov/geo/tiger/TIGER' + str(args.year)+ '/' + args.geolevel.upper() + '/' + filename
+
+        elif args.year == 2010:
+            fileroot = 'tl_' + str(args.year) + '_' + statecode + '_' + args.geolevel + '10'
+            filename = fileroot + '.zip'
+            url = 'http://www2.census.gov/geo/tiger/TIGER' + str(args.year)+ '/' + args.geolevel.upper() + '/' + str(args.year) + '/' + filename
+
         filedir = os.path.join(rootdir, str(args.year), args.geolevel, fileroot)
         require_dir(filedir)
-
-        url = 'http://www2.census.gov/geo/tiger/TIGER' + str(args.year)+ '/' + args.geolevel.upper() + '/' + filename
         print 'Getting ' + state + ' ' + args.geolevel + ' shape file: ' + filename
 
         try:
