@@ -3,11 +3,15 @@ Downloading US census shapefiles in one shot
 Code modified from: https://vvanhee.wordpress.com/2012/01/25/download-all-u-s-census-block-shapefiles/
 
 Running the script will download the zip files from the US census site, 
-put it into subfolders in the folder of the python script,unzip the zip file, 
+put it into subfolders in the folder of the python script, unzip the zip file, 
 and delete the original zip file.
 
-To run, type in the following command into the command line as an example:
-python census_shapefile_download.py --year 2012 --geolevel bg --s DC MD VA
+Running example: 
+
+python census_shapefile_download.py --year 2012 --geolevel bg --state DC MD VA --json
+
+This line will download shapefiles for block group (bg), for states of DC, MA and VA, for the year of 2012. 
+It will unzip the shapefiles to geojson and keep both shapefiles and geojson in separate folders.
 
 required arguments:
   -s, --state: State(s) that you want to download the shape files for. Use two-character abbreviations, eg. --state DC MD VA
@@ -17,6 +21,7 @@ optional arguments:
   -y, --year: Download year (Choose single year between 2010 and 2015). Default to 2014.
   -g, --geolevel: Geographical level (Choose between tract, bg, tabblock). Default to tract.
   -z, --zip: Keep files in zipped format. Default is false (ie. will unzip).
+  -j, --json: Convert shapefile to json. Requires ogr2ogr installed on the system. Default is to not convert. 
 
 The level argument can take on one of the three values. Default to 'tract' if the arg is not specified.
     tract: census tract
@@ -29,6 +34,7 @@ import sys
 import os
 import errno
 import argparse
+import subprocess
 
 def require_dir(path):
     # This function make the directory if it doesn't exist already
@@ -69,8 +75,14 @@ parser.add_argument("-s", "--state", help="State(s) that you want to download th
                     Use two-character abbreviations, eg. --state DC MD VA", 
                     nargs='*', choices=states.keys())
 
-#Specify whether to unzip (Unzip will occur by default)
+# Specify whether to unzip (Unzip will occur by default)
 parser.add_argument("-z", "--zip", help="Keep files in zipped format. Default is to unzip.", action="store_true")
+
+# Specify whether to convert shape file to geojson. 
+# Requires ogr2ogr to be installed on the system to work. See http://www.gdal.org/ogr2ogr.html
+
+parser.add_argument("-j", "--json", help="Convert shapefile to json. Default is to not convert. \
+                    Note: requires ogr2ogr (http://www.gdal.org/ogr2ogr.html) installed on the system.", action="store_true")
 
 args = parser.parse_args()
 
@@ -101,18 +113,40 @@ if __name__ == "__main__":
             filename = fileroot + '.zip'
             url = 'http://www2.census.gov/geo/tiger/TIGER' + str(args.year)+ '/' + args.geolevel.upper() + '/' + str(args.year) + '/' + filename
 
-        filedir = os.path.join(rootdir, str(args.year), args.geolevel, fileroot)
+        # Make shapefile/ and geojson/ folders if it doesn't exist already
+        filedir = os.path.join(rootdir, 'shapefile')
         require_dir(filedir)
+        if args.json:
+            require_dir(os.path.join(rootdir, 'geojson'))
+
         print 'Getting ' + state + ' ' + args.geolevel + ' shape file: ' + filename
 
         try:
             urllib.urlretrieve(url, os.path.join(filedir, filename))
 
+            # unzip unless specified otherwise, and remove zip file
             if not args.zip:
                 os.chdir(filedir)
-                os.system('unzip ' + os.path.join(filedir, filename))
-                os.system('rm ' + os.path.join(filedir, filename))
+                subprocess.call('unzip ' + os.path.join(filedir, filename) + ' -d ' + fileroot, shell=True)
+                subprocess.call('rm ' + os.path.join(filedir, filename), shell=True)
                 os.chdir(rootdir)
+
+                # convert to geojson - requires ogr2ogr installed on the system. 
+                if args.json:
+                    subprocess.call('ogr2ogr -f GeoJSON -t_srs crs:84 ' + \
+                        os.path.join(rootdir, 'geojson', fileroot) + '.geojson ' + \
+                        os.path.join(filedir, fileroot, fileroot) + '.shp', shell=True)
+
+            # if user only want geojson but not unzip, then unzip to a subfolder, 
+            # convert the shapefile to json, then delete the subfolder that contain unzipped files
+            if args.zip and args.json:
+                os.chdir(filedir)
+                subprocess.call('unzip ' + os.path.join(filedir, filename) + ' -d ' + fileroot, shell=True)
+                os.chdir(rootdir)
+                subprocess.call('ogr2ogr -f GeoJSON -t_srs crs:84 ' + \
+                    os.path.join(rootdir, 'geojson', fileroot) + '.geojson ' + \
+                    os.path.join(filedir, fileroot, fileroot) + '.shp', shell=True)
+                subprocess.call('rm -rf ' + os.path.join(filedir, fileroot), shell=True)
 
         except:
             print "Unexpected error:", sys.exc_info()[0]
