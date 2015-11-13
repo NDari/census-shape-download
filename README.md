@@ -16,3 +16,5 @@ This line will download shapefiles for block group (bg), for states of DC, MA an
 Type `python census_shapefile_download.py --help` to get arguments available to pass in the command line.
 
 If you need to download multiple year or geo-levels, use the shell script `census_shapefile_download.sh`.
+
+11/13/15-IKD: Downloaded shape files and geojson files has been removed from the repo to reduce repo size.
